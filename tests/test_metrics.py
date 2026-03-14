@@ -43,10 +43,10 @@ import pytest
 
 from recua.metrics import EngineStats, MetricsCollector
 
-
 # ---------------------------------------------------------------------------
 # EngineStats
 # ---------------------------------------------------------------------------
+
 
 class TestEngineStats:
     def test_default_values_are_zero(self) -> None:
@@ -76,6 +76,7 @@ class TestEngineStats:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mc() -> MetricsCollector:
     return MetricsCollector()
@@ -84,6 +85,7 @@ def mc() -> MetricsCollector:
 # ---------------------------------------------------------------------------
 # Counter: job_queued
 # ---------------------------------------------------------------------------
+
 
 class TestJobQueued:
     def test_increments_queued(self, mc: MetricsCollector) -> None:
@@ -116,6 +118,7 @@ class TestJobQueued:
 # Counter: job_started
 # ---------------------------------------------------------------------------
 
+
 class TestJobStarted:
     def test_decrements_queued_increments_active(self, mc: MetricsCollector) -> None:
         mc.job_queued()
@@ -143,6 +146,7 @@ class TestJobStarted:
 # Counter: job_completed
 # ---------------------------------------------------------------------------
 
+
 class TestJobCompleted:
     def test_decrements_active_increments_completed(self, mc: MetricsCollector) -> None:
         mc.job_queued()
@@ -168,6 +172,7 @@ class TestJobCompleted:
 # Counter: job_failed
 # ---------------------------------------------------------------------------
 
+
 class TestJobFailed:
     def test_decrements_active_increments_failed(self, mc: MetricsCollector) -> None:
         mc.job_queued()
@@ -185,6 +190,7 @@ class TestJobFailed:
 # ---------------------------------------------------------------------------
 # Full lifecycle sequences
 # ---------------------------------------------------------------------------
+
 
 class TestLifecycleSequences:
     def test_successful_job_lifecycle(self, mc: MetricsCollector) -> None:
@@ -227,6 +233,7 @@ class TestLifecycleSequences:
 # record_bytes
 # ---------------------------------------------------------------------------
 
+
 class TestRecordBytes:
     def test_accumulates_bytes_done(self, mc: MetricsCollector) -> None:
         mc.record_bytes(1024)
@@ -249,6 +256,7 @@ class TestRecordBytes:
 # ---------------------------------------------------------------------------
 # snapshot — speed calculation
 # ---------------------------------------------------------------------------
+
 
 class TestSnapshotSpeed:
     def test_speed_is_zero_with_no_samples(self, mc: MetricsCollector) -> None:
@@ -286,6 +294,7 @@ class TestSnapshotSpeed:
         We monkey-patch the window to 0.1s to avoid a 5s test.
         """
         import recua.metrics as metrics_mod
+
         original = metrics_mod._SPEED_WINDOW_SECONDS
         metrics_mod._SPEED_WINDOW_SECONDS = 0.1
         try:
@@ -340,6 +349,7 @@ class TestSnapshotSpeed:
 # ---------------------------------------------------------------------------
 # Thread safety
 # ---------------------------------------------------------------------------
+
 
 class TestThreadSafety:
     def test_concurrent_lifecycle_calls_no_corruption(self, mc: MetricsCollector) -> None:

@@ -9,13 +9,13 @@ always run regardless of rich availability.
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from recua.job import TransferJob
 from recua.metrics import MetricsCollector
-from recua.progress import ProgressDisplay, _PlainDisplay, make_display
+from recua.progress import _PlainDisplay, make_display
 
 
 def _job(name: str = "file.bin") -> TransferJob:
@@ -30,10 +30,12 @@ def _job(name: str = "file.bin") -> TransferJob:
 # make_display factory
 # ---------------------------------------------------------------------------
 
+
 class TestMakeDisplay:
     def test_returns_rich_display_when_rich_available(self) -> None:
         pytest.importorskip("rich")
         from recua.progress import _RichDisplay
+
         display = make_display(MetricsCollector())
         assert isinstance(display, _RichDisplay)
 
@@ -46,6 +48,7 @@ class TestMakeDisplay:
 # ---------------------------------------------------------------------------
 # _PlainDisplay
 # ---------------------------------------------------------------------------
+
 
 class TestPlainDisplay:
     def test_start_does_not_raise(self) -> None:
@@ -71,6 +74,7 @@ class TestPlainDisplay:
 
     def test_stop_logs_summary(self, caplog) -> None:
         import logging
+
         metrics = MetricsCollector()
         metrics.job_queued()
         metrics.job_started()
@@ -88,6 +92,7 @@ class TestPlainDisplay:
 # _RichDisplay (only runs when rich is installed)
 # ---------------------------------------------------------------------------
 
+
 class TestRichDisplay:
     @pytest.fixture(autouse=True)
     def require_rich(self) -> None:
@@ -95,12 +100,14 @@ class TestRichDisplay:
 
     def test_start_and_stop(self) -> None:
         from recua.progress import _RichDisplay
+
         d = _RichDisplay(MetricsCollector())
         d.start()
         d.stop()
 
     def test_on_progress_creates_task(self) -> None:
         from recua.progress import _RichDisplay
+
         d = _RichDisplay(MetricsCollector())
         d.start()
         job = _job("test.bin")
@@ -110,6 +117,7 @@ class TestRichDisplay:
 
     def test_on_complete_removes_task(self) -> None:
         from recua.progress import _RichDisplay
+
         d = _RichDisplay(MetricsCollector())
         d.start()
         job = _job("done.bin")
@@ -120,6 +128,7 @@ class TestRichDisplay:
 
     def test_on_error_removes_task(self) -> None:
         from recua.progress import _RichDisplay
+
         d = _RichDisplay(MetricsCollector())
         d.start()
         job = _job("failed.bin")
@@ -130,6 +139,7 @@ class TestRichDisplay:
 
     def test_stop_is_idempotent(self) -> None:
         from recua.progress import _RichDisplay
+
         d = _RichDisplay(MetricsCollector())
         d.start()
         d.stop()
@@ -140,10 +150,12 @@ class TestRichDisplay:
 # Progress display wired through engine
 # ---------------------------------------------------------------------------
 
+
 class TestProgressWiredThroughEngine:
     def test_progress_false_does_not_create_display(self) -> None:
         from recua.engine import TransferEngine
         from recua.options import TransferOptions
+
         engine = TransferEngine(TransferOptions(progress=False))
         engine.start()
         assert engine._display is None
@@ -153,6 +165,7 @@ class TestProgressWiredThroughEngine:
     def test_progress_true_creates_display(self) -> None:
         from recua.engine import TransferEngine
         from recua.options import TransferOptions
+
         engine = TransferEngine(TransferOptions(progress=True))
         engine.start()
         assert engine._display is not None

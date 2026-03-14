@@ -29,10 +29,10 @@ for external inspection tools (DB Browser, DuckDB) during long runs.
 
 from __future__ import annotations
 
+import contextlib
 import sqlite3
 import threading
 from pathlib import Path
-
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS transfers (
@@ -86,7 +86,7 @@ class SQLiteStateStore:
         conn = sqlite3.connect(
             self._path,
             check_same_thread=False,
-            isolation_level=None,   # autocommit; we manage transactions explicitly
+            isolation_level=None,  # autocommit; we manage transactions explicitly
         )
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL;")
@@ -218,11 +218,8 @@ class SQLiteStateStore:
 
     def close(self) -> None:
         """Close the database connection. Safe to call multiple times."""
-        with self._lock:
-            try:
-                self._conn.close()
-            except Exception:
-                pass
+        with self._lock, contextlib.suppress(Exception):
+            self._conn.close()
 
 
 class NullStateStore:

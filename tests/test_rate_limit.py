@@ -30,10 +30,10 @@ import pytest
 
 from recua.rate_limit import RateLimiter
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _measure_throughput(
     limiter: RateLimiter,
@@ -51,6 +51,7 @@ def _measure_throughput(
 # ---------------------------------------------------------------------------
 # Unlimited mode
 # ---------------------------------------------------------------------------
+
 
 class TestUnlimitedMode:
     def test_unlimited_flag_is_true(self) -> None:
@@ -82,6 +83,7 @@ class TestUnlimitedMode:
 # Construction
 # ---------------------------------------------------------------------------
 
+
 class TestConstruction:
     def test_unlimited_flag_is_false_when_capped(self) -> None:
         limiter = RateLimiter(1.0)
@@ -101,6 +103,7 @@ class TestConstruction:
 # consume() — token accounting (no timing dependency)
 # ---------------------------------------------------------------------------
 
+
 class TestConsumeTokenAccounting:
     def test_consume_zero_bytes_is_noop(self) -> None:
         """consume(0) should not raise or block."""
@@ -114,12 +117,12 @@ class TestConsumeTokenAccounting:
         The bucket starts empty, so we wait 1s for it to fill first.
         """
         limiter = RateLimiter(10.0)  # 10 MB/s → 10 MiB bucket
-        time.sleep(1.1)              # let the bucket fill to its 1s ceiling
-        chunk = 1 * 1_048_576        # 1 MiB — well within the 10 MiB bucket
+        time.sleep(1.1)  # let the bucket fill to its 1s ceiling
+        chunk = 1 * 1_048_576  # 1 MiB — well within the 10 MiB bucket
         start = time.monotonic()
         limiter.consume(chunk)
         elapsed = time.monotonic() - start
-        assert elapsed < 0.05        # no sleep should occur
+        assert elapsed < 0.05  # no sleep should occur
 
     def test_full_bucket_consumed_then_refills(self) -> None:
         """
@@ -148,6 +151,7 @@ class TestConsumeTokenAccounting:
 # consume() — throughput cap (timing-based, generous tolerance)
 # ---------------------------------------------------------------------------
 
+
 class TestThroughputCap:
     def test_throughput_bounded_by_cap(self) -> None:
         """
@@ -158,13 +162,13 @@ class TestThroughputCap:
         cap_bytes = cap_mb * 1_048_576
         limiter = RateLimiter(cap_mb)
 
-        chunk = 256 * 1024       # 256 KiB chunks
-        n_chunks = 30            # 30 * 256 KiB = 7.5 MiB total
+        chunk = 256 * 1024  # 256 KiB chunks
+        n_chunks = 30  # 30 * 256 KiB = 7.5 MiB total
         # At 5 MB/s this should take ~1.5s; well measurable
 
         actual = _measure_throughput(limiter, chunk, n_chunks)
         assert actual < cap_bytes * 2.0, (
-            f"Throughput {actual/1e6:.2f} MB/s exceeded 2x cap of {cap_mb} MB/s"
+            f"Throughput {actual / 1e6:.2f} MB/s exceeded 2x cap of {cap_mb} MB/s"
         )
 
     def test_throughput_not_absurdly_slow(self) -> None:
@@ -181,13 +185,14 @@ class TestThroughputCap:
 
         actual = _measure_throughput(limiter, chunk, n_chunks)
         assert actual > cap_bytes * 0.3, (
-            f"Throughput {actual/1e6:.2f} MB/s is far below cap of {cap_mb} MB/s"
+            f"Throughput {actual / 1e6:.2f} MB/s is far below cap of {cap_mb} MB/s"
         )
 
 
 # ---------------------------------------------------------------------------
 # Burst ceiling
 # ---------------------------------------------------------------------------
+
 
 class TestBurstCeiling:
     def test_idle_period_does_not_allow_unbounded_burst(self) -> None:
@@ -225,6 +230,7 @@ class TestBurstCeiling:
 # ---------------------------------------------------------------------------
 # Thread safety
 # ---------------------------------------------------------------------------
+
 
 class TestThreadSafety:
     def test_concurrent_consumers_no_errors(self) -> None:
@@ -279,5 +285,5 @@ class TestThreadSafety:
 
         actual = total_bytes / elapsed
         assert actual < cap_bytes * 2.0, (
-            f"Aggregate throughput {actual/1e6:.2f} MB/s exceeded 2x cap {cap_mb} MB/s"
+            f"Aggregate throughput {actual / 1e6:.2f} MB/s exceeded 2x cap {cap_mb} MB/s"
         )

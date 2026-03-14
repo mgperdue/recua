@@ -49,16 +49,16 @@ from recua.exceptions import QueueFullError
 from recua.job import TransferJob
 from recua.scheduler import Scheduler
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _job(name: str, priority: int = 0) -> TransferJob:
     return TransferJob(
         source=f"https://example.com/{name}.bin",
         dest=Path(f"/tmp/{name}.bin"),
-        name=name,          # set explicit name so display_name == name, not "name.bin"
+        name=name,  # set explicit name so display_name == name, not "name.bin"
         priority=priority,
     )
 
@@ -78,6 +78,7 @@ def _drain(scheduler: Scheduler, n: int) -> list[TransferJob]:
 # Construction
 # ---------------------------------------------------------------------------
 
+
 class TestConstruction:
     def test_qsize_starts_at_zero(self) -> None:
         s = Scheduler(maxsize=10)
@@ -95,6 +96,7 @@ class TestConstruction:
 # ---------------------------------------------------------------------------
 # put()
 # ---------------------------------------------------------------------------
+
 
 class TestPut:
     def test_basic_enqueue(self) -> None:
@@ -156,6 +158,7 @@ class TestPut:
 # get()
 # ---------------------------------------------------------------------------
 
+
 class TestGet:
     def test_returns_none_on_empty_queue(self) -> None:
         s = Scheduler(maxsize=10)
@@ -187,6 +190,7 @@ class TestGet:
 # ---------------------------------------------------------------------------
 # Priority ordering
 # ---------------------------------------------------------------------------
+
 
 class TestPriorityOrdering:
     def test_lower_priority_value_dequeued_first(self) -> None:
@@ -245,6 +249,7 @@ class TestPriorityOrdering:
 # task_done() / join()
 # ---------------------------------------------------------------------------
 
+
 class TestTaskDoneJoin:
     def test_join_unblocks_after_all_task_done(self) -> None:
         """
@@ -273,7 +278,7 @@ class TestTaskDoneJoin:
 
         # Wait until consumer has called all task_done()s, then join()
         consumed.wait()
-        s.join()   # must return immediately — all tasks already done
+        s.join()  # must return immediately — all tasks already done
         t.join(timeout=1.0)
         assert not t.is_alive()
 
@@ -287,6 +292,7 @@ class TestTaskDoneJoin:
 # ---------------------------------------------------------------------------
 # Thread safety
 # ---------------------------------------------------------------------------
+
 
 class TestThreadSafety:
     def test_concurrent_producers_correct_count(self) -> None:

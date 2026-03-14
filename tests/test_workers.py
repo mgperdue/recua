@@ -54,14 +54,13 @@ _resolve_adapter():
 from __future__ import annotations
 
 import threading
-import time
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import responses as responses_lib
 
-from recua.exceptions import FatalTransferError, RateLimitError, RetriableError
+from recua.exceptions import FatalTransferError
 from recua.job import TransferJob
 from recua.metrics import MetricsCollector
 from recua.options import TransferOptions
@@ -69,7 +68,6 @@ from recua.rate_limit import RateLimiter
 from recua.scheduler import Scheduler
 from recua.state import NullStateStore, SQLiteStateStore
 from recua.workers import Worker
-
 
 # ---------------------------------------------------------------------------
 # Fixtures and helpers
@@ -119,14 +117,15 @@ def _make_worker(
 def _run_worker(worker: Worker, sched: Scheduler, shutdown: threading.Event) -> None:
     """Start worker, wait for queue to drain, then signal shutdown."""
     worker.start()
-    sched.join()           # wait for all submitted jobs to be processed
-    shutdown.set()         # tell the worker to exit
+    sched.join()  # wait for all submitted jobs to be processed
+    shutdown.set()  # tell the worker to exit
     worker.join(timeout=3.0)
 
 
 # ---------------------------------------------------------------------------
 # Lifecycle
 # ---------------------------------------------------------------------------
+
 
 class TestLifecycle:
     def test_worker_exits_when_shutdown_set(self, tmp_path: Path) -> None:
@@ -157,6 +156,7 @@ class TestLifecycle:
 # ---------------------------------------------------------------------------
 # Successful transfer
 # ---------------------------------------------------------------------------
+
 
 class TestSuccessfulTransfer:
     @responses_lib.activate
@@ -231,9 +231,7 @@ class TestSuccessfulTransfer:
         state.mark_complete(job.resume_key)
 
         metrics = MetricsCollector()
-        worker, sched, shutdown = _make_worker(
-            tmp_path=tmp_path, state=state, metrics=metrics
-        )
+        worker, sched, shutdown = _make_worker(tmp_path=tmp_path, state=state, metrics=metrics)
         sched.put(job)
         _run_worker(worker, sched, shutdown)
 
@@ -246,6 +244,7 @@ class TestSuccessfulTransfer:
 # ---------------------------------------------------------------------------
 # Retry behaviour
 # ---------------------------------------------------------------------------
+
 
 class TestRetryBehaviour:
     @responses_lib.activate
@@ -271,9 +270,7 @@ class TestRetryBehaviour:
 
         state = SQLiteStateStore(tmp_path / "state.db")
         opts = TransferOptions(chunk_size=1024, retries=2, backoff_base=0.01)
-        worker, sched, shutdown = _make_worker(
-            tmp_path=tmp_path, state=state, options=opts
-        )
+        worker, sched, shutdown = _make_worker(tmp_path=tmp_path, state=state, options=opts)
         sched.put(_job(dest=dest))
         _run_worker(worker, sched, shutdown)
 
@@ -287,7 +284,9 @@ class TestRetryBehaviour:
 
         errors: list[tuple[TransferJob, Exception]] = []
         opts = TransferOptions(
-            chunk_size=1024, retries=2, backoff_base=0.01,
+            chunk_size=1024,
+            retries=2,
+            backoff_base=0.01,
             on_error=lambda job, exc: errors.append((job, exc)),
         )
         worker, sched, shutdown = _make_worker(tmp_path=tmp_path, options=opts)
@@ -305,9 +304,7 @@ class TestRetryBehaviour:
 
         state = SQLiteStateStore(tmp_path / "state.db")
         opts = TransferOptions(chunk_size=1024, retries=5, backoff_base=0.01)
-        worker, sched, shutdown = _make_worker(
-            tmp_path=tmp_path, state=state, options=opts
-        )
+        worker, sched, shutdown = _make_worker(tmp_path=tmp_path, state=state, options=opts)
         sched.put(_job(dest=dest))
         _run_worker(worker, sched, shutdown)
 
@@ -319,8 +316,10 @@ class TestRetryBehaviour:
     def test_rate_limit_uses_retry_after(self, tmp_path: Path) -> None:
         dest = tmp_path / "file.bin"
         responses_lib.add(
-            responses_lib.GET, URL,
-            status=429, headers={"Retry-After": "0.05"},
+            responses_lib.GET,
+            URL,
+            status=429,
+            headers={"Retry-After": "0.05"},
         )
         responses_lib.add(responses_lib.GET, URL, body=BODY, status=200)
 
@@ -338,6 +337,7 @@ class TestRetryBehaviour:
         state = SQLiteStateStore(tmp_path / "state.db")
 
         from recua.adapters.http import HTTPAdapter
+
         adapter = HTTPAdapter()
 
         with patch.object(adapter, "fetch", side_effect=MemoryError("OOM")):
@@ -366,6 +366,7 @@ class TestRetryBehaviour:
 # Resume behaviour
 # ---------------------------------------------------------------------------
 
+
 class TestResumeBehaviour:
     @responses_lib.activate
     def test_resume_appends_from_offset(self, tmp_path: Path) -> None:
@@ -388,9 +389,7 @@ class TestResumeBehaviour:
         responses_lib.add(responses_lib.GET, URL, body=second_half, status=206)
 
         opts = TransferOptions(chunk_size=256, retries=0)
-        worker, sched, shutdown = _make_worker(
-            tmp_path=tmp_path, state=state, options=opts
-        )
+        worker, sched, shutdown = _make_worker(tmp_path=tmp_path, state=state, options=opts)
         sched.put(_job(dest=dest))
         _run_worker(worker, sched, shutdown)
 
@@ -411,9 +410,7 @@ class TestResumeBehaviour:
         responses_lib.add(responses_lib.GET, URL, body=BODY, status=200)
 
         opts = TransferOptions(chunk_size=256, retries=2, backoff_base=0.01)
-        worker, sched, shutdown = _make_worker(
-            tmp_path=tmp_path, state=state, options=opts
-        )
+        worker, sched, shutdown = _make_worker(tmp_path=tmp_path, state=state, options=opts)
         sched.put(_job(dest=dest))
         _run_worker(worker, sched, shutdown)
 
@@ -428,6 +425,7 @@ class TestResumeBehaviour:
 # Rate limiter integration
 # ---------------------------------------------------------------------------
 
+
 class TestRateLimiterIntegration:
     @responses_lib.activate
     def test_rate_limiter_consume_called_per_chunk(self, tmp_path: Path) -> None:
@@ -441,6 +439,7 @@ class TestRateLimiterIntegration:
         shutdown = threading.Event()
         sched = Scheduler(maxsize=10)
         from recua.adapters.http import HTTPAdapter
+
         worker = Worker(
             worker_id=0,
             scheduler=sched,
@@ -460,6 +459,7 @@ class TestRateLimiterIntegration:
 # ---------------------------------------------------------------------------
 # on_progress callback
 # ---------------------------------------------------------------------------
+
 
 class TestOnProgressCallback:
     @responses_lib.activate
@@ -501,6 +501,7 @@ class TestOnProgressCallback:
 # ---------------------------------------------------------------------------
 # _resolve_adapter
 # ---------------------------------------------------------------------------
+
 
 class TestResolveAdapter:
     def test_raises_fatal_for_unknown_scheme(self, tmp_path: Path) -> None:

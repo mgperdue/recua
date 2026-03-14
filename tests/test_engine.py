@@ -39,7 +39,6 @@ stats():
 
 from __future__ import annotations
 
-import threading
 import time
 from pathlib import Path
 
@@ -50,7 +49,6 @@ from recua.engine import TransferEngine
 from recua.exceptions import EngineNotStartedError, EngineShutdownError, QueueFullError
 from recua.job import TransferJob
 from recua.options import TransferOptions
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -86,6 +84,7 @@ def _register(name: str, body: bytes = BODY, status: int = 200) -> None:
 # ---------------------------------------------------------------------------
 # Lifecycle
 # ---------------------------------------------------------------------------
+
 
 class TestLifecycle:
     def test_start_creates_correct_number_of_workers(self, tmp_path: Path) -> None:
@@ -155,6 +154,7 @@ class TestLifecycle:
 # Submission
 # ---------------------------------------------------------------------------
 
+
 class TestSubmission:
     def test_submit_before_start_raises(self, tmp_path: Path) -> None:
         engine = TransferEngine(_opts())
@@ -207,6 +207,7 @@ class TestSubmission:
 # ---------------------------------------------------------------------------
 # End-to-end
 # ---------------------------------------------------------------------------
+
 
 class TestEndToEnd:
     @responses_lib.activate
@@ -306,11 +307,13 @@ class TestEndToEnd:
 
         def produce(submit):
             for i in range(n):
-                submit(TransferJob(
-                    source=f"{BASE_URL}/data{i}.bin",
-                    dest=tmp_path / f"data{i}.bin",
-                    name=f"data{i}.bin",
-                ))
+                submit(
+                    TransferJob(
+                        source=f"{BASE_URL}/data{i}.bin",
+                        dest=tmp_path / f"data{i}.bin",
+                        name=f"data{i}.bin",
+                    )
+                )
 
         with TransferEngine(_opts(max_workers=3)) as engine:
             produce(engine.submit)
@@ -323,6 +326,7 @@ class TestEndToEnd:
 # ---------------------------------------------------------------------------
 # stats()
 # ---------------------------------------------------------------------------
+
 
 class TestStats:
     def test_stats_before_start_returns_zeros(self, tmp_path: Path) -> None:

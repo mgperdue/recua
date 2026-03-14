@@ -1,4 +1,5 @@
 """Tests for TransferJob."""
+
 from pathlib import Path
 
 from recua.job import TransferJob
@@ -17,5 +18,7 @@ def test_display_name_falls_back_to_dest_name():
 
 
 def test_display_name_uses_name_when_provided():
-    job = TransferJob(source="https://example.com/file.bin", dest=Path("/tmp/file.bin"), name="My File")
+    job = TransferJob(
+        source="https://example.com/file.bin", dest=Path("/tmp/file.bin"), name="My File"
+    )
     assert job.display_name == "My File"

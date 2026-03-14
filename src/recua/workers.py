@@ -34,6 +34,7 @@ Worker lifecycle
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import threading
 import time
@@ -68,14 +69,14 @@ class Worker(threading.Thread):
         self,
         *,
         worker_id: int,
-        scheduler: "Scheduler",
-        adapters: list["TransferAdapter"],
-        state: "StateStore",
-        metrics: "MetricsCollector",
-        rate_limiter: "RateLimiter",
-        options: "TransferOptions",
+        scheduler: Scheduler,
+        adapters: list[TransferAdapter],
+        state: StateStore,
+        metrics: MetricsCollector,
+        rate_limiter: RateLimiter,
+        options: TransferOptions,
         shutdown_event: threading.Event,
-        display: "ProgressDisplay | None" = None,
+        display: ProgressDisplay | None = None,
     ) -> None:
         super().__init__(name=f"recua-worker-{worker_id}", daemon=True)
         self._id = worker_id
@@ -110,9 +111,7 @@ class Worker(threading.Thread):
 
     def _execute(self, job: TransferJob) -> None:
         if self._state.is_complete(job.resume_key):
-            logger.debug(
-                "Worker %d skipping already-complete: %s", self._id, job.display_name
-            )
+            logger.debug("Worker %d skipping already-complete: %s", self._id, job.display_name)
             self._metrics.job_completed()
             return
 
@@ -129,13 +128,15 @@ class Worker(threading.Thread):
                     self._fail(job, exc)
                     return
                 wait = (
-                    exc.retry_after
-                    if exc.retry_after is not None
-                    else self._backoff_delay(attempt)
+                    exc.retry_after if exc.retry_after is not None else self._backoff_delay(attempt)
                 )
                 logger.warning(
                     "Worker %d rate-limited on %s — waiting %.1fs (attempt %d/%d)",
-                    self._id, job.display_name, wait, attempt + 1, max_attempts,
+                    self._id,
+                    job.display_name,
+                    wait,
+                    attempt + 1,
+                    max_attempts,
                 )
                 time.sleep(wait)
 
@@ -146,7 +147,9 @@ class Worker(threading.Thread):
                 if "200 instead of 206" in str(exc) or "Checksum mismatch" in str(exc):
                     logger.debug(
                         "Worker %d resetting offset for %s (%s)",
-                        self._id, job.display_name, "no Range support" if "206" in str(exc) else "checksum mismatch",
+                        self._id,
+                        job.display_name,
+                        "no Range support" if "206" in str(exc) else "checksum mismatch",
                     )
                     self._state.set_offset(job.resume_key, 0)
                     self._truncate(job)
@@ -154,7 +157,12 @@ class Worker(threading.Thread):
                 delay = self._backoff_delay(attempt)
                 logger.warning(
                     "Worker %d retrying %s in %.1fs: %s (attempt %d/%d)",
-                    self._id, job.display_name, delay, exc, attempt + 1, max_attempts,
+                    self._id,
+                    job.display_name,
+                    delay,
+                    exc,
+                    attempt + 1,
+                    max_attempts,
                 )
                 time.sleep(delay)
 
@@ -165,7 +173,10 @@ class Worker(threading.Thread):
             except Exception as exc:
                 logger.error(
                     "Worker %d unexpected error on %s: %s",
-                    self._id, job.display_name, exc, exc_info=True,
+                    self._id,
+                    job.display_name,
+                    exc,
+                    exc_info=True,
                 )
                 self._fail(job, FatalTransferError(str(exc)))
                 return
@@ -183,7 +194,10 @@ class Worker(threading.Thread):
 
         logger.debug(
             "Worker %d transferring %s (offset=%d, mode=%s)",
-            self._id, job.display_name, offset, mode,
+            self._id,
+            job.display_name,
+            offset,
+            mode,
         )
 
         with open(job.dest, mode) as fh:
@@ -207,10 +221,7 @@ class Worker(threading.Thread):
                 self._fire_progress(job, fh.tell())
 
         # Checksum verification (before marking complete)
-        if (
-            self._options.checksum_algorithm is not None
-            and job.expected_checksum is not None
-        ):
+        if self._options.checksum_algorithm is not None and job.expected_checksum is not None:
             verify_checksum(
                 job.dest,
                 job.expected_checksum,
@@ -223,10 +234,8 @@ class Worker(threading.Thread):
         logger.info("Worker %d completed: %s", self._id, job.display_name)
 
         if self._display is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._display.on_complete(job)
-            except Exception:
-                pass
 
         if self._options.on_complete is not None:
             try:
@@ -234,7 +243,9 @@ class Worker(threading.Thread):
             except Exception as exc:
                 logger.warning(
                     "Worker %d on_complete callback raised for %s: %s",
-                    self._id, job.display_name, exc,
+                    self._id,
+                    job.display_name,
+                    exc,
                 )
 
     # ------------------------------------------------------------------
@@ -244,18 +255,14 @@ class Worker(threading.Thread):
     def _fire_progress(self, job: TransferJob, bytes_done: int) -> None:
         """Update the progress display and fire the on_progress callback."""
         if self._display is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._display.on_progress(job, bytes_done, job.expected_size)
-            except Exception:
-                pass
 
         if self._options.on_progress is not None:
             try:
                 self._options.on_progress(job, bytes_done, job.expected_size)
             except Exception as exc:
-                logger.debug(
-                    "Worker %d on_progress callback raised: %s", self._id, exc
-                )
+                logger.debug("Worker %d on_progress callback raised: %s", self._id, exc)
 
     def _fail(self, job: TransferJob, exc: Exception) -> None:
         reason = str(exc)
@@ -264,10 +271,8 @@ class Worker(threading.Thread):
         self._metrics.job_failed()
 
         if self._display is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._display.on_error(job, exc)
-            except Exception:
-                pass
 
         if self._options.on_error is not None:
             try:
@@ -275,23 +280,23 @@ class Worker(threading.Thread):
             except Exception as cb_exc:
                 logger.warning(
                     "Worker %d on_error callback raised for %s: %s",
-                    self._id, job.display_name, cb_exc,
+                    self._id,
+                    job.display_name,
+                    cb_exc,
                 )
 
-    def _resolve_adapter(self, source: str) -> "TransferAdapter":
+    def _resolve_adapter(self, source: str) -> TransferAdapter:
         for adapter in self._adapters:
             if adapter.supports(source):
                 return adapter
         raise FatalTransferError(f"No adapter found for source: {source!r}")
 
     def _backoff_delay(self, attempt: int) -> float:
-        return float(self._options.backoff_base ** attempt)
+        return float(self._options.backoff_base**attempt)
 
     def _truncate(self, job: TransferJob) -> None:
         try:
             if job.dest.exists():
                 job.dest.write_bytes(b"")
         except OSError as exc:
-            logger.warning(
-                "Worker %d could not truncate %s: %s", self._id, job.dest, exc
-            )
+            logger.warning("Worker %d could not truncate %s: %s", self._id, job.dest, exc)

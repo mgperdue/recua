@@ -45,7 +45,7 @@ _REFRESH_HZ = 10
 _REFRESH_INTERVAL = 1.0 / _REFRESH_HZ
 
 
-def make_display(metrics: "MetricsCollector") -> "ProgressDisplay":
+def make_display(metrics: MetricsCollector) -> ProgressDisplay:
     """
     Return the best available ProgressDisplay.
 
@@ -53,6 +53,7 @@ def make_display(metrics: "MetricsCollector") -> "ProgressDisplay":
     """
     try:
         import rich  # noqa: F401
+
         return _RichDisplay(metrics)
     except ImportError:
         logger.debug("rich not installed — using plain progress logging")
@@ -67,13 +68,13 @@ class ProgressDisplay:
 
     def on_progress(
         self,
-        job: "TransferJob",
+        job: TransferJob,
         bytes_done: int,
         bytes_total: int | None,
     ) -> None: ...
 
-    def on_complete(self, job: "TransferJob") -> None: ...
-    def on_error(self, job: "TransferJob", exc: Exception) -> None: ...
+    def on_complete(self, job: TransferJob) -> None: ...
+    def on_error(self, job: TransferJob, exc: Exception) -> None: ...
 
 
 class _PlainDisplay(ProgressDisplay):
@@ -83,7 +84,7 @@ class _PlainDisplay(ProgressDisplay):
     Logs a completion/failure message for each job. No live bars.
     """
 
-    def __init__(self, metrics: "MetricsCollector") -> None:
+    def __init__(self, metrics: MetricsCollector) -> None:
         self._metrics = metrics
 
     def start(self) -> None:
@@ -93,16 +94,17 @@ class _PlainDisplay(ProgressDisplay):
         stats = self._metrics.snapshot()
         logger.info(
             "recua transfer complete — %d completed, %d failed",
-            stats.completed, stats.failed,
+            stats.completed,
+            stats.failed,
         )
 
-    def on_progress(self, job: "TransferJob", bytes_done: int, bytes_total: int | None) -> None:
+    def on_progress(self, job: TransferJob, bytes_done: int, bytes_total: int | None) -> None:
         pass  # no per-chunk output in plain mode
 
-    def on_complete(self, job: "TransferJob") -> None:
+    def on_complete(self, job: TransferJob) -> None:
         logger.info("✓ %s", job.display_name)
 
-    def on_error(self, job: "TransferJob", exc: Exception) -> None:
+    def on_error(self, job: TransferJob, exc: Exception) -> None:
         logger.error("✗ %s — %s", job.display_name, exc)
 
 
@@ -120,7 +122,7 @@ class _RichDisplay(ProgressDisplay):
     dict protected by self._lock.
     """
 
-    def __init__(self, metrics: "MetricsCollector") -> None:
+    def __init__(self, metrics: MetricsCollector) -> None:
         self._metrics = metrics
         self._lock = threading.Lock()
         self._task_ids: dict[str, int] = {}  # job.display_name → rich task id
@@ -135,7 +137,6 @@ class _RichDisplay(ProgressDisplay):
             DownloadColumn,
             Progress,
             SpinnerColumn,
-            TaskID,
             TextColumn,
             TimeRemainingColumn,
             TransferSpeedColumn,
@@ -170,7 +171,7 @@ class _RichDisplay(ProgressDisplay):
 
     def on_progress(
         self,
-        job: "TransferJob",
+        job: TransferJob,
         bytes_done: int,
         bytes_total: int | None,
     ) -> None:
@@ -192,7 +193,7 @@ class _RichDisplay(ProgressDisplay):
                     total=bytes_total,
                 )
 
-    def on_complete(self, job: "TransferJob") -> None:
+    def on_complete(self, job: TransferJob) -> None:
         if self._progress is None:
             return
         with self._lock:
@@ -200,7 +201,7 @@ class _RichDisplay(ProgressDisplay):
             if task_id is not None:
                 self._progress.update(task_id, visible=False)  # type: ignore[union-attr]
 
-    def on_error(self, job: "TransferJob", exc: Exception) -> None:
+    def on_error(self, job: TransferJob, exc: Exception) -> None:
         if self._progress is None:
             return
         with self._lock:

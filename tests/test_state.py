@@ -49,6 +49,7 @@ def db_path(tmp_path: Path) -> Path:
 # NullStateStore (already passing — kept as regression guard)
 # ---------------------------------------------------------------------------
 
+
 class TestNullStateStore:
     def test_offset_is_always_zero(self) -> None:
         store = NullStateStore()
@@ -69,6 +70,7 @@ class TestNullStateStore:
 # SQLiteStateStore — schema
 # ---------------------------------------------------------------------------
 
+
 class TestSQLiteStateStoreSchema:
     def test_creates_db_file(self, db_path: Path) -> None:
         SQLiteStateStore(db_path)
@@ -83,6 +85,7 @@ class TestSQLiteStateStoreSchema:
 # ---------------------------------------------------------------------------
 # SQLiteStateStore — get_offset
 # ---------------------------------------------------------------------------
+
 
 class TestGetOffset:
     def test_returns_zero_for_unknown_key(self, store: SQLiteStateStore) -> None:
@@ -102,6 +105,7 @@ class TestGetOffset:
 # ---------------------------------------------------------------------------
 # SQLiteStateStore — set_offset
 # ---------------------------------------------------------------------------
+
 
 class TestSetOffset:
     def test_insert_on_first_call(self, store: SQLiteStateStore) -> None:
@@ -131,6 +135,7 @@ class TestSetOffset:
 # SQLiteStateStore — mark_complete
 # ---------------------------------------------------------------------------
 
+
 class TestMarkComplete:
     def test_marks_unseen_key_complete(self, store: SQLiteStateStore) -> None:
         store.mark_complete(KEY_A)
@@ -154,6 +159,7 @@ class TestMarkComplete:
 # ---------------------------------------------------------------------------
 # SQLiteStateStore — mark_failed
 # ---------------------------------------------------------------------------
+
 
 class TestMarkFailed:
     def test_marks_unseen_key_failed(self, store: SQLiteStateStore) -> None:
@@ -183,6 +189,7 @@ class TestMarkFailed:
 # SQLiteStateStore — is_complete / get_status truth table
 # ---------------------------------------------------------------------------
 
+
 class TestStatusTruthTable:
     def test_unseen_key_status_is_none(self, store: SQLiteStateStore) -> None:
         assert store.get_status(KEY_A) is None
@@ -206,6 +213,7 @@ class TestStatusTruthTable:
 # SQLiteStateStore — get_failed
 # ---------------------------------------------------------------------------
 
+
 class TestGetFailed:
     def test_empty_when_no_failures(self, store: SQLiteStateStore) -> None:
         store.mark_complete(KEY_A)
@@ -222,6 +230,7 @@ class TestGetFailed:
 # ---------------------------------------------------------------------------
 # SQLiteStateStore — resume semantics (persistence across instances)
 # ---------------------------------------------------------------------------
+
 
 class TestResumeSemantics:
     def test_offset_survives_new_instance(self, db_path: Path) -> None:
@@ -253,6 +262,7 @@ class TestResumeSemantics:
 # ---------------------------------------------------------------------------
 # SQLiteStateStore — thread safety
 # ---------------------------------------------------------------------------
+
 
 class TestThreadSafety:
     def test_concurrent_set_offset_no_corruption(self, store: SQLiteStateStore) -> None:
@@ -308,6 +318,7 @@ class TestThreadSafety:
 # ---------------------------------------------------------------------------
 # SQLiteStateStore — close()
 # ---------------------------------------------------------------------------
+
 
 class TestClose:
     def test_close_is_idempotent(self, store: SQLiteStateStore) -> None:

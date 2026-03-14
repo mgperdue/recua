@@ -116,12 +116,11 @@ class TransferEngine:
         # Initialise progress display if requested.
         if self._options.progress:
             from recua.progress import make_display
+
             self._display = make_display(self._metrics)
             self._display.start()
 
-        logger.info(
-            "Starting TransferEngine with %d workers", self._options.max_workers
-        )
+        logger.info("Starting TransferEngine with %d workers", self._options.max_workers)
 
         for i in range(self._options.max_workers):
             worker = Worker(
@@ -234,9 +233,7 @@ class TransferEngine:
         QueueFullError:         queue is full and block=False or timeout expired.
         """
         if not self._started:
-            raise EngineNotStartedError(
-                "Call engine.start() before submitting jobs."
-            )
+            raise EngineNotStartedError("Call engine.start() before submitting jobs.")
         if self._closed:
             raise EngineShutdownError(
                 "Cannot submit jobs after close() or cancel() has been called."
@@ -278,7 +275,7 @@ class TransferEngine:
     # Context manager
     # ------------------------------------------------------------------
 
-    def __enter__(self) -> "TransferEngine":
+    def __enter__(self) -> TransferEngine:
         self.start()
         return self
 

@@ -11,12 +11,12 @@ from pathlib import Path
 
 import pytest
 
-from recua.cli import main, _read_url_file
-
+from recua.cli import _read_url_file, main
 
 # ---------------------------------------------------------------------------
 # Argument parsing
 # ---------------------------------------------------------------------------
+
 
 class TestArgParsing:
     def test_no_command_exits_nonzero(self) -> None:
@@ -52,6 +52,7 @@ class TestArgParsing:
 # _read_url_file
 # ---------------------------------------------------------------------------
 
+
 class TestReadUrlFile:
     def test_reads_urls(self, tmp_path: Path) -> None:
         f = tmp_path / "urls.txt"
@@ -81,18 +82,24 @@ class TestReadUrlFile:
 # get command (real HTTP)
 # ---------------------------------------------------------------------------
 
+
 class TestGetCommand:
     def test_downloads_single_file(self, httpserver, tmp_path: Path) -> None:
         body = b"cli get test"
         httpserver.expect_request("/file.bin").respond_with_data(body)
         url = httpserver.url_for("/file.bin")
 
-        rc = main([
-            "--no-progress",
-            "get", url,
-            "--dest", str(tmp_path),
-            "--workers", "1",
-        ])
+        rc = main(
+            [
+                "--no-progress",
+                "get",
+                url,
+                "--dest",
+                str(tmp_path),
+                "--workers",
+                "1",
+            ]
+        )
 
         assert rc == 0
         assert (tmp_path / "file.bin").read_bytes() == body
@@ -101,28 +108,39 @@ class TestGetCommand:
         httpserver.expect_request("/missing.bin").respond_with_data("nope", status=404)
         url = httpserver.url_for("/missing.bin")
 
-        rc = main([
-            "--no-progress",
-            "get", url,
-            "--dest", str(tmp_path),
-            "--retries", "0",
-        ])
+        rc = main(
+            [
+                "--no-progress",
+                "get",
+                url,
+                "--dest",
+                str(tmp_path),
+                "--retries",
+                "0",
+            ]
+        )
 
         assert rc == 1
 
     def test_checksum_pass(self, httpserver, tmp_path: Path) -> None:
         import hashlib
+
         body = b"checksum cli test"
         sha256 = hashlib.sha256(body).hexdigest()
         httpserver.expect_request("/chk.bin").respond_with_data(body)
         url = httpserver.url_for("/chk.bin")
 
-        rc = main([
-            "--no-progress",
-            "get", url,
-            "--dest", str(tmp_path),
-            "--sha256", sha256,
-        ])
+        rc = main(
+            [
+                "--no-progress",
+                "get",
+                url,
+                "--dest",
+                str(tmp_path),
+                "--sha256",
+                sha256,
+            ]
+        )
 
         assert rc == 0
 
@@ -133,12 +151,18 @@ class TestGetCommand:
         url_a = httpserver.url_for("/a.bin")
         url_b = httpserver.url_for("/b.bin")
 
-        rc = main([
-            "--no-progress",
-            "get", url_a, url_b,
-            "--dest", str(tmp_path),
-            "--sha256", "abc123",
-        ])
+        rc = main(
+            [
+                "--no-progress",
+                "get",
+                url_a,
+                url_b,
+                "--dest",
+                str(tmp_path),
+                "--sha256",
+                "abc123",
+            ]
+        )
 
         assert rc == 1  # multiple URLs + checksum flag is an error
 
@@ -147,6 +171,7 @@ class TestGetCommand:
 # batch command (real HTTP)
 # ---------------------------------------------------------------------------
 
+
 class TestBatchCommand:
     def test_downloads_all_urls_in_file(self, httpserver, tmp_path: Path) -> None:
         bodies = {"/f1.bin": b"first", "/f2.bin": b"second", "/f3.bin": b"third"}
@@ -154,36 +179,47 @@ class TestBatchCommand:
             httpserver.expect_request(path).respond_with_data(body)
 
         url_file = tmp_path / "urls.txt"
-        url_file.write_text(
-            "\n".join(httpserver.url_for(p) for p in bodies) + "\n"
-        )
+        url_file.write_text("\n".join(httpserver.url_for(p) for p in bodies) + "\n")
 
-        rc = main([
-            "--no-progress",
-            "batch", str(url_file),
-            "--dest", str(tmp_path / "out"),
-            "--workers", "2",
-        ])
+        rc = main(
+            [
+                "--no-progress",
+                "batch",
+                str(url_file),
+                "--dest",
+                str(tmp_path / "out"),
+                "--workers",
+                "2",
+            ]
+        )
 
         assert rc == 0
         for path, body in bodies.items():
             assert (tmp_path / "out" / path.lstrip("/")).read_bytes() == body
 
     def test_missing_url_file_returns_1(self, tmp_path: Path) -> None:
-        rc = main([
-            "--no-progress",
-            "batch", str(tmp_path / "nonexistent.txt"),
-            "--dest", str(tmp_path),
-        ])
+        rc = main(
+            [
+                "--no-progress",
+                "batch",
+                str(tmp_path / "nonexistent.txt"),
+                "--dest",
+                str(tmp_path),
+            ]
+        )
         assert rc == 1
 
     def test_empty_url_file_returns_1(self, tmp_path: Path) -> None:
         url_file = tmp_path / "empty.txt"
         url_file.write_text("# just a comment\n")
 
-        rc = main([
-            "--no-progress",
-            "batch", str(url_file),
-            "--dest", str(tmp_path),
-        ])
+        rc = main(
+            [
+                "--no-progress",
+                "batch",
+                str(url_file),
+                "--dest",
+                str(tmp_path),
+            ]
+        )
         assert rc == 1

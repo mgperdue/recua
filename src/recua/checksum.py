@@ -64,9 +64,7 @@ def compute_checksum(path: Path, algorithm: str, chunk_size: int = _HASH_CHUNK_S
     try:
         h = hashlib.new(algorithm)
     except ValueError as exc:
-        raise FatalTransferError(
-            f"Unsupported checksum algorithm {algorithm!r}: {exc}"
-        ) from exc
+        raise FatalTransferError(f"Unsupported checksum algorithm {algorithm!r}: {exc}") from exc
 
     with open(path, "rb") as fh:
         while True:

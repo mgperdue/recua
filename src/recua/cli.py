@@ -32,9 +32,9 @@ Entry point: recua (defined in pyproject.toml [project.scripts])
 
 from __future__ import annotations
 
-import sys
 import argparse
 import logging
+import sys
 from pathlib import Path
 
 from recua.engine import TransferEngine
@@ -49,7 +49,8 @@ def _build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Enable debug logging.",
     )
@@ -74,21 +75,24 @@ def _build_parser() -> argparse.ArgumentParser:
         help="URL(s) to download.",
     )
     get_p.add_argument(
-        "--dest", "-d",
+        "--dest",
+        "-d",
         type=Path,
         default=Path("."),
         metavar="DIR",
         help="Destination directory (default: current directory).",
     )
     get_p.add_argument(
-        "--workers", "-w",
+        "--workers",
+        "-w",
         type=int,
         default=4,
         metavar="N",
         help="Number of parallel download workers (default: 4).",
     )
     get_p.add_argument(
-        "--retries", "-r",
+        "--retries",
+        "-r",
         type=int,
         default=5,
         metavar="N",
@@ -132,8 +136,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "batch",
         help="Download URLs listed in a file.",
         description=(
-            "Read URLs from a text file (one per line, # comments ignored) "
-            "and download them all."
+            "Read URLs from a text file (one per line, # comments ignored) and download them all."
         ),
     )
     batch_p.add_argument(
@@ -143,21 +146,24 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Text file containing URLs, one per line.",
     )
     batch_p.add_argument(
-        "--dest", "-d",
+        "--dest",
+        "-d",
         type=Path,
         default=Path("."),
         metavar="DIR",
         help="Destination directory (default: current directory).",
     )
     batch_p.add_argument(
-        "--workers", "-w",
+        "--workers",
+        "-w",
         type=int,
         default=4,
         metavar="N",
         help="Number of parallel download workers (default: 4).",
     )
     batch_p.add_argument(
-        "--retries", "-r",
+        "--retries",
+        "-r",
         type=int,
         default=5,
         metavar="N",
@@ -274,10 +280,7 @@ def _run_batch(args: argparse.Namespace) -> int:
     )
 
     with TransferEngine(opts) as engine:
-        engine.submit_many(
-            TransferJob(source=url, dest=dest / Path(url).name)
-            for url in urls
-        )
+        engine.submit_many(TransferJob(source=url, dest=dest / Path(url).name) for url in urls)
 
     stats = engine.stats()
     print(
@@ -285,7 +288,7 @@ def _run_batch(args: argparse.Namespace) -> int:
         f"of {stats.completed + stats.failed} total."
     )
     if stats.failed:
-        print(f"Re-run with --state to resume failed downloads.", file=sys.stderr)
+        print("Re-run with --state to resume failed downloads.", file=sys.stderr)
         return 1
     return 0
 

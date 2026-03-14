@@ -62,16 +62,15 @@ from pathlib import Path
 import pytest
 import requests
 import responses as responses_lib
-from responses import matchers
 
 from recua.adapters.http import HTTPAdapter
 from recua.exceptions import FatalTransferError, RateLimitError, RetriableError
 from recua.job import TransferJob
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _job(url: str = "https://example.com/file.bin") -> TransferJob:
     return TransferJob(source=url, dest=Path("/tmp/file.bin"), name="file.bin")
@@ -84,6 +83,7 @@ def _adapter() -> HTTPAdapter:
 # ---------------------------------------------------------------------------
 # supports()
 # ---------------------------------------------------------------------------
+
 
 class TestSupports:
     def test_https_is_supported(self) -> None:
@@ -105,6 +105,7 @@ class TestSupports:
 # ---------------------------------------------------------------------------
 # get_size()
 # ---------------------------------------------------------------------------
+
 
 class TestGetSize:
     @responses_lib.activate
@@ -159,6 +160,7 @@ class TestGetSize:
 # fetch() — happy path
 # ---------------------------------------------------------------------------
 
+
 class TestFetchHappyPath:
     @responses_lib.activate
     def test_yields_all_chunks(self) -> None:
@@ -202,6 +204,7 @@ class TestFetchHappyPath:
 # fetch() — resume (Range header)
 # ---------------------------------------------------------------------------
 
+
 class TestFetchResume:
     @responses_lib.activate
     def test_sends_range_header_on_nonzero_offset(self) -> None:
@@ -242,6 +245,7 @@ class TestFetchResume:
 # ---------------------------------------------------------------------------
 # fetch() — status code handling
 # ---------------------------------------------------------------------------
+
 
 class TestFetchStatusCodes:
     @responses_lib.activate
@@ -316,6 +320,7 @@ class TestFetchStatusCodes:
 # fetch() — network errors
 # ---------------------------------------------------------------------------
 
+
 class TestFetchNetworkErrors:
     @responses_lib.activate
     def test_timeout_raises_retriable_error(self) -> None:
@@ -352,6 +357,7 @@ class TestFetchNetworkErrors:
 # fetch() — chunk_size
 # ---------------------------------------------------------------------------
 
+
 class TestFetchChunkSize:
     @responses_lib.activate
     def test_custom_chunk_size_returns_correct_bytes(self) -> None:
@@ -369,6 +375,7 @@ class TestFetchChunkSize:
 # ---------------------------------------------------------------------------
 # Thread safety — per-thread sessions
 # ---------------------------------------------------------------------------
+
 
 class TestThreadSafety:
     def test_each_thread_gets_independent_session(self) -> None:

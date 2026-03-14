@@ -15,8 +15,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from recua.options import TransferOptions
 
 
@@ -111,17 +109,23 @@ class TestFieldAssignment:
 
 class TestCallbackFields:
     def test_on_complete_accepts_callable(self) -> None:
-        def handler(job): pass
+        def handler(job):
+            pass
+
         opts = TransferOptions(on_complete=handler)
         assert opts.on_complete is handler
 
     def test_on_error_accepts_callable(self) -> None:
-        def handler(job, exc): pass
+        def handler(job, exc):
+            pass
+
         opts = TransferOptions(on_error=handler)
         assert opts.on_error is handler
 
     def test_on_progress_accepts_callable(self) -> None:
-        def handler(job, done, total): pass
+        def handler(job, done, total):
+            pass
+
         opts = TransferOptions(on_progress=handler)
         assert opts.on_progress is handler
 

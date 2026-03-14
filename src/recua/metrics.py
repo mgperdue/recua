@@ -35,8 +35,7 @@ import time
 from collections import deque
 from dataclasses import dataclass
 
-
-_SPEED_WINDOW_SECONDS = 5.0    # rolling window for speed calculation
+_SPEED_WINDOW_SECONDS = 5.0  # rolling window for speed calculation
 _SPEED_SAMPLE_INTERVAL = 0.25  # min seconds between deque appends per thread
 _BYTES_PER_MB = 1_048_576.0
 
@@ -49,6 +48,7 @@ class EngineStats:
     Returned by MetricsCollector.snapshot(). All fields are consistent
     with each other — captured atomically under the collector's lock.
     """
+
     completed: int = 0
     failed: int = 0
     queued: int = 0

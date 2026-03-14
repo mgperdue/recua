@@ -4,12 +4,10 @@ TransferOptions — global behavioral configuration for the engine.
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
-
 
 # Supported checksum algorithms — subset of hashlib guaranteed available
 # across all Python 3.11+ platforms.

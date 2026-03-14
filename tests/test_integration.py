@@ -21,17 +21,13 @@ Coverage
 from __future__ import annotations
 
 import hashlib
-import threading
-import time
 from pathlib import Path
 
 import pytest
-import requests
 
 from recua.engine import TransferEngine
 from recua.job import TransferJob
 from recua.options import TransferOptions
-
 
 pytestmark = pytest.mark.integration
 
@@ -39,6 +35,7 @@ pytestmark = pytest.mark.integration
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _opts(tmp_path: Path, **kwargs) -> TransferOptions:
     defaults = dict(
@@ -64,6 +61,7 @@ def _sha256(data: bytes) -> str:
 # Basic download
 # ---------------------------------------------------------------------------
 
+
 class TestBasicDownload:
     def test_single_file(self, httpserver, tmp_path: Path) -> None:
         body = b"hello from a real HTTP server " * 100
@@ -85,12 +83,12 @@ class TestBasicDownload:
 
         opts = _opts(tmp_path, max_workers=3)
         with TransferEngine(opts) as engine:
-            for path, body in bodies.items():
+            for path, _body in bodies.items():
                 url = httpserver.url_for(path)
                 engine.submit(_job(url, tmp_path / path.lstrip("/")))
 
-        for path, body in bodies.items():
-            assert (tmp_path / path.lstrip("/")).read_bytes() == body
+        for path, _body in bodies.items():
+            assert (tmp_path / path.lstrip("/")).read_bytes() == _body
 
     def test_large_file(self, httpserver, tmp_path: Path) -> None:
         body = b"x" * (1 * 1024 * 1024)  # 1 MiB
@@ -109,6 +107,7 @@ class TestBasicDownload:
 # State persistence — restart simulation
 # ---------------------------------------------------------------------------
 
+
 class TestStatePersistence:
     def test_completed_job_skipped_on_second_run(self, httpserver, tmp_path: Path) -> None:
         """
@@ -122,6 +121,7 @@ class TestStatePersistence:
             nonlocal request_count
             request_count += 1
             from werkzeug.wrappers import Response
+
             return Response(body, status=200)
 
         httpserver.expect_request("/data.bin").respond_with_handler(handler)
@@ -175,6 +175,7 @@ class TestStatePersistence:
 # Checksum verification
 # ---------------------------------------------------------------------------
 
+
 class TestChecksumVerification:
     def test_correct_checksum_passes(self, httpserver, tmp_path: Path) -> None:
         body = b"verified data " * 50
@@ -186,10 +187,14 @@ class TestChecksumVerification:
 
         opts = _opts(tmp_path, checksum_algorithm="sha256")
         with TransferEngine(opts) as engine:
-            engine.submit(TransferJob(
-                source=url, dest=dest,
-                name="verified.bin", expected_checksum=checksum,
-            ))
+            engine.submit(
+                TransferJob(
+                    source=url,
+                    dest=dest,
+                    name="verified.bin",
+                    expected_checksum=checksum,
+                )
+            )
 
         assert dest.read_bytes() == body
 
@@ -212,10 +217,14 @@ class TestChecksumVerification:
             on_error=lambda job, exc: errors.append((job, exc)),
         )
         with TransferEngine(opts) as engine:
-            engine.submit(TransferJob(
-                source=url, dest=dest,
-                name="tampered.bin", expected_checksum=wrong_checksum,
-            ))
+            engine.submit(
+                TransferJob(
+                    source=url,
+                    dest=dest,
+                    name="tampered.bin",
+                    expected_checksum=wrong_checksum,
+                )
+            )
 
         assert len(errors) == 1
         assert "Checksum mismatch" in str(errors[0][1])
@@ -238,6 +247,7 @@ class TestChecksumVerification:
 # ---------------------------------------------------------------------------
 # Error handling
 # ---------------------------------------------------------------------------
+
 
 class TestErrorHandling:
     def test_404_marks_failed_immediately(self, httpserver, tmp_path: Path) -> None:
