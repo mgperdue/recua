@@ -12,13 +12,15 @@ from typing import Protocol, runtime_checkable
 
 from recua.job import TransferJob
 
+_DEFAULT_CHUNK_SIZE = 1_048_576  # 1 MiB — matches TransferOptions default
+
 
 @runtime_checkable
 class TransferAdapter(Protocol):
     """
     Protocol for pluggable transfer backends.
 
-    Implementations must be thread-safe — multiple workers will call
+    Implementations must be thread-safe — multiple workers call
     fetch() concurrently on the same adapter instance.
 
     Provided adapters (v1):   HTTPAdapter
@@ -37,17 +39,35 @@ class TransferAdapter(Protocol):
         """
         ...
 
-    def fetch(self, job: TransferJob, offset: int = 0) -> Iterator[bytes]:
+    def fetch(
+        self,
+        job: TransferJob,
+        offset: int = 0,
+        chunk_size: int = _DEFAULT_CHUNK_SIZE,
+    ) -> Iterator[bytes]:
         """
         Yield chunks of bytes for the given job, starting at offset.
 
-        offset > 0 indicates a resume — adapter must honour it (Range header,
-        seek, etc.) or raise FatalTransferError if resume is unsupported.
+        Parameters
+        ----------
+        job:
+            The job to fetch.
+        offset:
+            Byte offset to resume from. Adapter must honour it (e.g. via
+            HTTP Range header) or raise FatalTransferError if unsupported.
+        chunk_size:
+            Read buffer size in bytes. Passed from TransferOptions.chunk_size.
 
-        Raises:
-            RetriableError:     transient failure, worker will retry
-            FatalTransferError: permanent failure, worker will not retry
-            RateLimitError:     429-style, carries retry_after
+        Yields
+        ------
+        bytes
+            Raw content chunks. Never yields empty bytes.
+
+        Raises
+        ------
+        RetriableError:     transient failure, worker will retry
+        FatalTransferError: permanent failure, worker will not retry
+        RateLimitError:     429-style, carries retry_after in seconds
         """
         ...
 

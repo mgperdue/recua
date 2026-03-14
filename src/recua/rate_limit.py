@@ -69,7 +69,7 @@ class RateLimiter:
         self._unlimited = max_mb_per_sec is None
         if not self._unlimited:
             self._rate: float = max_mb_per_sec * 1_048_576  # MB/s → bytes/s
-            self._tokens: float = 0.0
+            self._tokens: float = 0.0                       # start empty — no burst on first call
             self._last_refill: float = time.monotonic()
             self._lock = threading.Lock()
 

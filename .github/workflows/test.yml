@@ -1,0 +1,55 @@
+name: Test
+
+on:
+  push:
+    branches: ["main", "feat/**", "fix/**", "chore/**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  test:
+    name: pytest / Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Run tests (unit + mocked HTTP)
+        run: >
+          uv run pytest
+          -m "not integration"
+          --cov=recua
+          --cov-report=term-missing
+          --cov-report=xml
+          --timeout=60
+          -v
+
+      - name: Run integration tests
+        run: >
+          uv run pytest
+          -m integration
+          --timeout=30
+          -v
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: matrix.python-version == '3.11'
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false

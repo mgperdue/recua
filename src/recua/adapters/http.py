@@ -169,12 +169,16 @@ class HTTPAdapter:
                 allow_redirects=True,
             )
         except requests.Timeout as exc:
-            raise RetriableError(f"Request timed out for {job.source!r}") from exc
+            raise RetriableError(
+                f"Request timed out for {job.source!r}"
+            ) from exc
         except (requests.ConnectionError, requests.exceptions.ChunkedEncodingError) as exc:
             # ConnectionError covers network-level failures.
             # ChunkedEncodingError can fire at request time (before iter_content)
             # when the server sends a malformed chunked response on first contact.
-            raise RetriableError(f"Connection error for {job.source!r}: {exc}") from exc
+            raise RetriableError(
+                f"Connection error for {job.source!r}: {exc}"
+            ) from exc
 
         self._raise_for_status(response, job)
 
@@ -194,7 +198,9 @@ class HTTPAdapter:
                 if chunk:  # filter keep-alive empty chunks
                     yield chunk
         except requests.ChunkedEncodingError as exc:
-            raise RetriableError(f"Stream interrupted for {job.source!r}: {exc}") from exc
+            raise RetriableError(
+                f"Stream interrupted for {job.source!r}: {exc}"
+            ) from exc
         except requests.ConnectionError as exc:
             raise RetriableError(
                 f"Connection lost during download of {job.source!r}: {exc}"
@@ -254,7 +260,9 @@ class HTTPAdapter:
             )
 
         if code in _RETRIABLE_STATUS:
-            raise RetriableError(f"HTTP {code} from {job.source!r} — transient server error")
+            raise RetriableError(
+                f"HTTP {code} from {job.source!r} — transient server error"
+            )
 
         if code in _FATAL_STATUS:
             raise FatalTransferError(
@@ -262,7 +270,9 @@ class HTTPAdapter:
             )
 
         # Any other non-2xx (redirects not followed, 418, etc.)
-        raise FatalTransferError(f"HTTP {code} from {job.source!r} — unexpected status")
+        raise FatalTransferError(
+            f"HTTP {code} from {job.source!r} — unexpected status"
+        )
 
     @staticmethod
     def _parse_retry_after(response: requests.Response) -> float | None:

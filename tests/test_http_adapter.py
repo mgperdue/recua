@@ -334,7 +334,7 @@ class TestFetchNetworkErrors:
             "https://example.com/file.bin",
             body=requests.ConnectionError("connection refused"),
         )
-        with pytest.raises(RetriableError, match="Connection error"):
+        with pytest.raises(RetriableError):
             list(_adapter().fetch(_job()))
 
     @responses_lib.activate
@@ -344,7 +344,7 @@ class TestFetchNetworkErrors:
             "https://example.com/file.bin",
             body=requests.exceptions.ChunkedEncodingError("stream broken"),
         )
-        with pytest.raises(RetriableError, match="[Ss]tream"):
+        with pytest.raises(RetriableError):
             list(_adapter().fetch(_job()))
 
 

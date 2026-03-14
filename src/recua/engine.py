@@ -40,18 +40,6 @@ Lifecycle state machine
 -----------------------
 CREATED → start() → RUNNING → close() → CLOSING → join() → DONE
                                        → cancel()         → DONE
-
-close() vs cancel()
--------------------
-close():  sets _closed=True. No more submissions accepted.
-          join() will drain the queue before stopping workers.
-          Use for graceful shutdown — all submitted jobs complete.
-
-cancel(): sets _closed=True AND immediately signals shutdown.
-          Workers finish their current chunk, then exit.
-          Remaining queued jobs are NOT processed.
-          Partial downloads remain resumable via StateStore.
-          join() waits for workers to exit.
 """
 
 from __future__ import annotations
@@ -100,6 +88,7 @@ class TransferEngine:
         self._shutdown_event = threading.Event()
         self._started = False
         self._closed = False
+        self._display = None  # set in start() if progress=True
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -110,6 +99,8 @@ class TransferEngine:
         Spin up worker threads and begin processing submitted jobs.
 
         Must be called exactly once before any submit() call.
+        If TransferOptions.progress=True and rich is installed, a live
+        progress display is started in a background thread.
 
         Raises
         ------
@@ -121,6 +112,12 @@ class TransferEngine:
                 "TransferEngine.start() called more than once. "
                 "Create a new TransferEngine instance for a new run."
             )
+
+        # Initialise progress display if requested.
+        if self._options.progress:
+            from recua.progress import make_display
+            self._display = make_display(self._metrics)
+            self._display.start()
 
         logger.info(
             "Starting TransferEngine with %d workers", self._options.max_workers
@@ -136,6 +133,7 @@ class TransferEngine:
                 rate_limiter=self._rate_limiter,
                 options=self._options,
                 shutdown_event=self._shutdown_event,
+                display=self._display,
             )
             worker.start()
             self._workers.append(worker)
@@ -165,10 +163,10 @@ class TransferEngine:
           1. Waits for the scheduler queue to drain completely.
           2. Sets the shutdown event, signalling workers to exit.
           3. Joins each worker thread.
+          4. Stops the progress display.
 
         For a cancelled shutdown (after cancel()):
-          The shutdown event is already set. Skips the queue drain and
-          waits directly for workers to finish their current chunk.
+          Skips the queue drain and waits directly for workers to exit.
 
         Safe to call before close() — will drain and shut down.
         """
@@ -176,7 +174,6 @@ class TransferEngine:
             return
 
         if not self._shutdown_event.is_set():
-            # Graceful path: drain the queue before stopping workers.
             logger.debug("TransferEngine joining — draining queue")
             self._scheduler.join()
             self._shutdown_event.set()
@@ -184,6 +181,9 @@ class TransferEngine:
         logger.debug("TransferEngine waiting for workers to exit")
         for worker in self._workers:
             worker.join()
+
+        if self._display is not None:
+            self._display.stop()
 
         logger.info("TransferEngine shut down cleanly")
 
@@ -195,8 +195,7 @@ class TransferEngine:
         Queued jobs that have not yet started are abandoned — partial
         downloads remain resumable via StateStore on the next run.
 
-        Call join() after cancel() to wait for workers to finish their
-        current chunks.
+        Call join() after cancel() to wait for workers to finish.
 
         Safe to call multiple times — subsequent calls are no-ops.
         """
@@ -225,20 +224,14 @@ class TransferEngine:
             The TransferJob to enqueue.
         block:
             If True (default), block until queue space is available.
-            Acts as natural backpressure on fast producers.
         timeout:
             When block=True, maximum seconds to wait for queue space.
-            None means wait indefinitely.
 
         Raises
         ------
-        EngineNotStartedError:
-            If start() has not been called.
-        EngineShutdownError:
-            If close() or cancel() has been called.
-        QueueFullError:
-            If block=False and the queue is at capacity, or if block=True
-            and the timeout expires before space becomes available.
+        EngineNotStartedError:  start() has not been called.
+        EngineShutdownError:    close() or cancel() has been called.
+        QueueFullError:         queue is full and block=False or timeout expired.
         """
         if not self._started:
             raise EngineNotStartedError(
@@ -256,9 +249,8 @@ class TransferEngine:
         """
         Submit an iterable of jobs with default blocking behaviour.
 
-        Equivalent to calling submit(job) for each job in the iterable.
-        Useful with generator producers — the queue applies backpressure
-        automatically, so the producer is only as fast as workers drain.
+        The queue applies backpressure automatically — the producer is
+        only as fast as workers can drain.
 
         Example
         -------
@@ -279,7 +271,6 @@ class TransferEngine:
         Return a consistent snapshot of current engine metrics.
 
         Safe to call from any thread at any time.
-        The snapshot is atomic — all fields reflect the same instant.
         """
         return self._metrics.snapshot()
 

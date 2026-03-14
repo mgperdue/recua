@@ -15,33 +15,21 @@ Worker lifecycle
       - write chunk to file
       - MetricsCollector.record_bytes() after each write
       - StateStore.set_offset() periodically to checkpoint progress
+      - on_progress callback after each chunk
 9.  On clean completion:
+      - Verify checksum if configured (RetriableError on mismatch)
       - StateStore.mark_complete()
       - MetricsCollector.job_completed()
-      - Fire options.on_complete callback
-10. On RetriableError (includes RateLimitError):
+      - Fire on_complete callback
+10. On RetriableError (includes RateLimitError and checksum mismatch):
       - Sleep retry_after (RateLimitError) or backoff (RetriableError)
       - If offset was reset to 0 (server doesn't support Range), truncate file
       - Increment attempt counter; if exhausted → treat as fatal
 11. On FatalTransferError:
       - StateStore.mark_failed()
       - MetricsCollector.job_failed()
-      - Fire options.on_error callback
+      - Fire on_error callback
 12. Repeat from step 1 until shutdown_event is set
-
-Retry / backoff policy
------------------------
-Attempt 0: immediate
-Attempt n: sleep backoff_base ** n seconds  (default: 1.5^n)
-RateLimitError: sleep retry_after if provided, else fall back to backoff
-
-200-for-206 reset
------------------
-When the HTTP adapter raises RetriableError because the server returned
-200 instead of 206 for a Range request, the offset in StateStore is
-non-zero but the file must be restarted from byte 0. We detect this via
-the "200 instead of 206" message in the exception, reset the StateStore
-offset to 0, and truncate the partial file before retrying.
 """
 
 from __future__ import annotations
@@ -51,22 +39,21 @@ import threading
 import time
 from typing import TYPE_CHECKING
 
+from recua.checksum import verify_checksum
 from recua.exceptions import FatalTransferError, RateLimitError, RetriableError
 from recua.job import TransferJob
 
 if TYPE_CHECKING:
     from recua.metrics import MetricsCollector
     from recua.options import TransferOptions
+    from recua.progress import ProgressDisplay
     from recua.protocols import StateStore, TransferAdapter
     from recua.rate_limit import RateLimiter
     from recua.scheduler import Scheduler
 
 logger = logging.getLogger(__name__)
 
-# Bytes written between StateStore checkpoints.
-# Smaller = more resume granularity, more SQLite writes.
-# Larger = fewer writes, coarser resume point on crash.
-_CHECKPOINT_INTERVAL = 16 * 1_048_576  # 16 MiB
+_CHECKPOINT_INTERVAL = 16 * 1_048_576  # 16 MiB between StateStore checkpoints
 
 
 class Worker(threading.Thread):
@@ -88,6 +75,7 @@ class Worker(threading.Thread):
         rate_limiter: "RateLimiter",
         options: "TransferOptions",
         shutdown_event: threading.Event,
+        display: "ProgressDisplay | None" = None,
     ) -> None:
         super().__init__(name=f"recua-worker-{worker_id}", daemon=True)
         self._id = worker_id
@@ -98,18 +86,13 @@ class Worker(threading.Thread):
         self._rate_limiter = rate_limiter
         self._options = options
         self._shutdown = shutdown_event
+        self._display = display
 
     # ------------------------------------------------------------------
     # Thread entry point
     # ------------------------------------------------------------------
 
     def run(self) -> None:
-        """
-        Main worker loop. Runs until shutdown_event is set.
-
-        Drains the scheduler continuously. On shutdown, finishes the
-        current job (if any) then exits cleanly.
-        """
         logger.debug("Worker %d started", self._id)
         while not self._shutdown.is_set():
             job = self._scheduler.get()
@@ -126,30 +109,22 @@ class Worker(threading.Thread):
     # ------------------------------------------------------------------
 
     def _execute(self, job: TransferJob) -> None:
-        """
-        Attempt to transfer job, retrying on transient errors.
-
-        Uses an iterative retry loop to avoid recursion stack growth
-        on high retry counts.
-        """
         if self._state.is_complete(job.resume_key):
             logger.debug(
                 "Worker %d skipping already-complete: %s", self._id, job.display_name
             )
-            # Count as completed so metrics stay consistent.
             self._metrics.job_completed()
             return
 
         self._metrics.job_started()
-        max_attempts = self._options.retries + 1  # retries=5 → 6 total attempts
+        max_attempts = self._options.retries + 1
 
         for attempt in range(max_attempts):
             try:
                 self._transfer(job)
-                return  # success — _transfer updated state and metrics
+                return
 
             except RateLimitError as exc:
-                # Catch before RetriableError since it's a subclass.
                 if attempt + 1 >= max_attempts:
                     self._fail(job, exc)
                     return
@@ -168,11 +143,10 @@ class Worker(threading.Thread):
                 if attempt + 1 >= max_attempts:
                     self._fail(job, exc)
                     return
-                # Server ignored Range header — reset to restart from byte 0.
-                if "200 instead of 206" in str(exc):
+                if "200 instead of 206" in str(exc) or "Checksum mismatch" in str(exc):
                     logger.debug(
-                        "Worker %d resetting offset for %s (no Range support)",
-                        self._id, job.display_name,
+                        "Worker %d resetting offset for %s (%s)",
+                        self._id, job.display_name, "no Range support" if "206" in str(exc) else "checksum mismatch",
                     )
                     self._state.set_offset(job.resume_key, 0)
                     self._truncate(job)
@@ -189,8 +163,6 @@ class Worker(threading.Thread):
                 return
 
             except Exception as exc:
-                # Unexpected errors (disk full, permission denied, etc.)
-                # are treated as fatal — no point retrying a broken environment.
                 logger.error(
                     "Worker %d unexpected error on %s: %s",
                     self._id, job.display_name, exc, exc_info=True,
@@ -198,20 +170,9 @@ class Worker(threading.Thread):
                 self._fail(job, FatalTransferError(str(exc)))
                 return
 
-        # Safety net — should be unreachable because the last iteration
-        # always calls return via success, _fail(), or the except clauses.
         self._fail(job, RetriableError(f"Exhausted {max_attempts} attempts for {job.display_name}"))
 
     def _transfer(self, job: TransferJob) -> None:
-        """
-        Execute a single transfer attempt — no retry logic here.
-
-        Streams bytes from the adapter to disk, checkpointing progress
-        to StateStore every _CHECKPOINT_INTERVAL bytes.
-
-        Raises RetriableError, RateLimitError, or FatalTransferError —
-        _execute() handles the retry/fail decision.
-        """
         adapter = self._resolve_adapter(job.source)
         offset = self._state.get_offset(job.resume_key)
 
@@ -243,17 +204,29 @@ class Worker(threading.Thread):
                     self._state.set_offset(job.resume_key, fh.tell())
                     bytes_since_checkpoint = 0
 
-                if self._options.on_progress is not None:
-                    try:
-                        self._options.on_progress(job, fh.tell(), job.expected_size)
-                    except Exception as exc:
-                        logger.debug(
-                            "Worker %d on_progress callback raised: %s", self._id, exc
-                        )
+                self._fire_progress(job, fh.tell())
+
+        # Checksum verification (before marking complete)
+        if (
+            self._options.checksum_algorithm is not None
+            and job.expected_checksum is not None
+        ):
+            verify_checksum(
+                job.dest,
+                job.expected_checksum,
+                self._options.checksum_algorithm,
+                display_name=job.display_name,
+            )
 
         self._state.mark_complete(job.resume_key)
         self._metrics.job_completed()
         logger.info("Worker %d completed: %s", self._id, job.display_name)
+
+        if self._display is not None:
+            try:
+                self._display.on_complete(job)
+            except Exception:
+                pass
 
         if self._options.on_complete is not None:
             try:
@@ -268,12 +241,33 @@ class Worker(threading.Thread):
     # Helpers
     # ------------------------------------------------------------------
 
+    def _fire_progress(self, job: TransferJob, bytes_done: int) -> None:
+        """Update the progress display and fire the on_progress callback."""
+        if self._display is not None:
+            try:
+                self._display.on_progress(job, bytes_done, job.expected_size)
+            except Exception:
+                pass
+
+        if self._options.on_progress is not None:
+            try:
+                self._options.on_progress(job, bytes_done, job.expected_size)
+            except Exception as exc:
+                logger.debug(
+                    "Worker %d on_progress callback raised: %s", self._id, exc
+                )
+
     def _fail(self, job: TransferJob, exc: Exception) -> None:
-        """Record a permanent failure and fire the on_error callback."""
         reason = str(exc)
         logger.error("Worker %d failed: %s — %s", self._id, job.display_name, reason)
         self._state.mark_failed(job.resume_key, reason)
         self._metrics.job_failed()
+
+        if self._display is not None:
+            try:
+                self._display.on_error(job, exc)
+            except Exception:
+                pass
 
         if self._options.on_error is not None:
             try:
@@ -285,18 +279,15 @@ class Worker(threading.Thread):
                 )
 
     def _resolve_adapter(self, source: str) -> "TransferAdapter":
-        """Return the first adapter that supports source, or raise FatalTransferError."""
         for adapter in self._adapters:
             if adapter.supports(source):
                 return adapter
         raise FatalTransferError(f"No adapter found for source: {source!r}")
 
     def _backoff_delay(self, attempt: int) -> float:
-        """Return exponential backoff delay in seconds for the given attempt."""
         return float(self._options.backoff_base ** attempt)
 
     def _truncate(self, job: TransferJob) -> None:
-        """Truncate dest file to zero bytes for a clean restart."""
         try:
             if job.dest.exists():
                 job.dest.write_bytes(b"")

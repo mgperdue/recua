@@ -55,8 +55,8 @@ class Scheduler:
     """
 
     def __init__(self, maxsize: int) -> None:
-        self._queue: queue.PriorityQueue[tuple[int, int, TransferJob]] = queue.PriorityQueue(
-            maxsize=maxsize
+        self._queue: queue.PriorityQueue[tuple[int, int, TransferJob]] = (
+            queue.PriorityQueue(maxsize=maxsize)
         )
         self._counter = itertools.count()
 

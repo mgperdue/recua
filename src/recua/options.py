@@ -4,10 +4,16 @@ TransferOptions — global behavioral configuration for the engine.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+
+
+# Supported checksum algorithms — subset of hashlib guaranteed available
+# across all Python 3.11+ platforms.
+ChecksumAlgorithm = Literal["md5", "sha1", "sha256", "sha512"]
 
 
 @dataclass
@@ -38,6 +44,15 @@ class TransferOptions:
     state_path:     Path to SQLite state database.
                     None disables persistence (no resume across restarts).
 
+    Integrity
+    ---------
+    checksum_algorithm:
+                    Hash algorithm used for post-download verification.
+                    None disables checksum verification.
+                    TransferJob.expected_checksum must be set for verification
+                    to occur — jobs without expected_checksum are skipped.
+                    Supported: "md5", "sha1", "sha256", "sha512".
+
     Callbacks
     ---------
     on_complete:    Called in the worker thread when a job finishes successfully.
@@ -47,7 +62,9 @@ class TransferOptions:
 
     UX
     --
-    progress:       Enable rich/tqdm progress display. Set False for daemon use.
+    progress:       Show a rich progress display in the terminal.
+                    Requires the `rich` extra: pip install recua[progress].
+                    Set False for daemon/embedded use where there is no TTY.
     """
 
     # concurrency
@@ -65,10 +82,13 @@ class TransferOptions:
     # persistence
     state_path: Path | None = None
 
-    # callbacks — generic; domain logic wired in by caller
-    on_complete: Callable[[Any], None] | None = None   # (TransferJob) -> None
-    on_error: Callable[[Any, Exception], None] | None = None  # (TransferJob, exc) -> None
-    on_progress: Callable[[Any, int, int | None], None] | None = None  # (job, done, total)
+    # integrity
+    checksum_algorithm: ChecksumAlgorithm | None = None
+
+    # callbacks
+    on_complete: Callable[[Any], None] | None = None
+    on_error: Callable[[Any, Exception], None] | None = None
+    on_progress: Callable[[Any, int, int | None], None] | None = None
 
     # ux
     progress: bool = True
