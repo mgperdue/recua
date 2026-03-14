@@ -19,13 +19,29 @@ dependencies = [
 [project.optional-dependencies]
 progress = ["rich>=13"]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=8",
+    "pytest-cov",
     "pytest-timeout",
     "responses",
     "mypy",
     "ruff",
+]
+
+[tool.coverage.run]
+source = ["recua"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+precision = 1
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.\\s*$",
 ]
 
 [tool.ruff]
@@ -42,3 +58,4 @@ mypy_path = "src"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--cov=recua --cov-report=term-missing --cov-report=html"

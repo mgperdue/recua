@@ -234,3 +234,7 @@ uv.lock
 
 # state files (example output, not for VCS)
 *.db
+
+# coverage
+.coverage
+htmlcov/
