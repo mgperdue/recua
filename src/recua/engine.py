@@ -47,16 +47,21 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
 from recua.adapters.http import HTTPAdapter
 from recua.exceptions import EngineNotStartedError, EngineShutdownError
 from recua.job import TransferJob
 from recua.metrics import EngineStats, MetricsCollector
 from recua.options import TransferOptions
+from recua.protocols import TransferAdapter
 from recua.rate_limit import RateLimiter
 from recua.scheduler import Scheduler
 from recua.state import NullStateStore, SQLiteStateStore
 from recua.workers import Worker
+
+if TYPE_CHECKING:
+    from recua.progress import ProgressDisplay
 
 logger = logging.getLogger(__name__)
 
@@ -83,12 +88,12 @@ class TransferEngine:
             if self._options.state_path
             else NullStateStore()
         )
-        self._adapters = [HTTPAdapter()]
+        self._adapters: list[TransferAdapter] = [HTTPAdapter()]
         self._workers: list[Worker] = []
         self._shutdown_event = threading.Event()
         self._started = False
         self._closed = False
-        self._display = None  # set in start() if progress=True
+        self._display: ProgressDisplay | None = None  # set in start() if progress=True
 
     # ------------------------------------------------------------------
     # Lifecycle

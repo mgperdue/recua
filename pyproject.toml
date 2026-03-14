@@ -32,6 +32,7 @@ dev = [
     "mypy",
     "ruff",
     "rich>=13",   # include in dev so progress tests work without extra install
+    "types-requests",     # mypy stubs for requests
     "mkdocs-material>=9", # docs
     "pre-commit>=3",      # git hooks
 ]

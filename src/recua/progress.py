@@ -36,6 +36,8 @@ import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from rich.progress import Progress as RichProgress
+
     from recua.job import TransferJob
     from recua.metrics import MetricsCollector
 
@@ -126,7 +128,7 @@ class _RichDisplay(ProgressDisplay):
         self._metrics = metrics
         self._lock = threading.Lock()
         self._task_ids: dict[str, int] = {}  # job.display_name → rich task id
-        self._progress: object | None = None
+        self._progress: RichProgress | None = None
         self._overall_task: int | None = None
         self._refresh_thread: threading.Thread | None = None
         self._stop_event = threading.Event()
@@ -151,10 +153,8 @@ class _RichDisplay(ProgressDisplay):
             TimeRemainingColumn(),
             refresh_per_second=_REFRESH_HZ,
         )
-        self._progress.start()  # type: ignore[union-attr]
-        self._overall_task = self._progress.add_task(  # type: ignore[union-attr]
-            "[green]Overall", total=None
-        )
+        self._progress.start()
+        self._overall_task = self._progress.add_task("[green]Overall", total=None)
 
         self._refresh_thread = threading.Thread(
             target=self._refresh_loop, daemon=True, name="recua-progress"
@@ -167,7 +167,7 @@ class _RichDisplay(ProgressDisplay):
             self._refresh_thread.join(timeout=2.0)
         if self._progress is not None:
             self._refresh_overall()
-            self._progress.stop()  # type: ignore[union-attr]
+            self._progress.stop()
 
     def on_progress(
         self,
@@ -180,14 +180,14 @@ class _RichDisplay(ProgressDisplay):
         with self._lock:
             task_id = self._task_ids.get(job.display_name)
             if task_id is None:
-                task_id = self._progress.add_task(  # type: ignore[union-attr]
+                task_id = self._progress.add_task(
                     job.display_name,
                     total=bytes_total,
                     completed=bytes_done,
                 )
                 self._task_ids[job.display_name] = task_id
             else:
-                self._progress.update(  # type: ignore[union-attr]
+                self._progress.update(
                     task_id,
                     completed=bytes_done,
                     total=bytes_total,
@@ -199,7 +199,7 @@ class _RichDisplay(ProgressDisplay):
         with self._lock:
             task_id = self._task_ids.pop(job.display_name, None)
             if task_id is not None:
-                self._progress.update(task_id, visible=False)  # type: ignore[union-attr]
+                self._progress.update(task_id, visible=False)
 
     def on_error(self, job: TransferJob, exc: Exception) -> None:
         if self._progress is None:
@@ -207,7 +207,7 @@ class _RichDisplay(ProgressDisplay):
         with self._lock:
             task_id = self._task_ids.pop(job.display_name, None)
             if task_id is not None:
-                self._progress.update(  # type: ignore[union-attr]
+                self._progress.update(
                     task_id,
                     description=f"[red]✗ {job.display_name}",
                     visible=False,
@@ -217,7 +217,7 @@ class _RichDisplay(ProgressDisplay):
         if self._progress is None or self._overall_task is None:
             return
         stats = self._metrics.snapshot()
-        self._progress.update(  # type: ignore[union-attr]
+        self._progress.update(
             self._overall_task,
             description=(
                 f"[green]✓ {stats.completed}  "

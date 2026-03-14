@@ -36,10 +36,11 @@ import argparse
 import logging
 import sys
 from pathlib import Path
+from typing import cast
 
 from recua.engine import TransferEngine
 from recua.job import TransferJob
-from recua.options import TransferOptions
+from recua.options import ChecksumAlgorithm, TransferOptions
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -234,7 +235,7 @@ def _run_get(args: argparse.Namespace) -> int:
         retries=args.retries,
         max_mb_per_sec=args.limit,
         state_path=args.state,
-        checksum_algorithm=checksum_algo,
+        checksum_algorithm=cast(ChecksumAlgorithm, checksum_algo) if checksum_algo else None,
         progress=not args.no_progress,
     )
 
