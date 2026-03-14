@@ -15,6 +15,7 @@ class TransferEngineError(Exception):
 
 # --- Lifecycle errors -------------------------------------------------------
 
+
 class EngineNotStartedError(TransferEngineError):
     """Raised when submit() is called before start()."""
 
@@ -24,6 +25,7 @@ class EngineShutdownError(TransferEngineError):
 
 
 # --- Queue errors ------------------------------------------------------------
+
 
 class QueueFullError(TransferEngineError):
     """
@@ -35,6 +37,7 @@ class QueueFullError(TransferEngineError):
 
 
 # --- Transfer errors ---------------------------------------------------------
+
 
 class TransferError(TransferEngineError):
     """Base class for errors that occur during a file transfer."""

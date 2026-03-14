@@ -1,4 +1,5 @@
 """Tests for the exception hierarchy."""
+
 from recua.exceptions import (
     EngineNotStartedError,
     EngineShutdownError,
