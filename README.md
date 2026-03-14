@@ -6,14 +6,14 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/youruser/recua/actions/workflows/test.yml">
-    <img src="https://github.com/youruser/recua/actions/workflows/test.yml/badge.svg" alt="Tests">
+  <a href="https://github.com/mgperdue/recua/actions/workflows/test.yml">
+    <img src="https://github.com/mgperdue/recua/actions/workflows/test.yml/badge.svg" alt="Tests">
   </a>
-  <a href="https://github.com/youruser/recua/actions/workflows/lint.yml">
-    <img src="https://github.com/youruser/recua/actions/workflows/lint.yml/badge.svg" alt="Lint">
+  <a href="https://github.com/mgperdue/recua/actions/workflows/lint.yml">
+    <img src="https://github.com/mgperdue/recua/actions/workflows/lint.yml/badge.svg" alt="Lint">
   </a>
-  <a href="https://codecov.io/gh/youruser/recua">
-    <img src="https://codecov.io/gh/youruser/recua/branch/main/graph/badge.svg" alt="Coverage">
+  <a href="https://codecov.io/gh/mgperdue/recua">
+    <img src="https://codecov.io/gh/mgperdue/recua/branch/main/graph/badge.svg" alt="Coverage">
   </a>
   <a href="https://pypi.org/project/recua/">
     <img src="https://img.shields.io/pypi/v/recua.svg" alt="PyPI version">
