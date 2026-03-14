@@ -7,7 +7,7 @@ on:
 # Trusted Publisher — no API key needed. Configure on PyPI:
 # https://pypi.org/manage/project/recua/settings/publishing/
 # Provider: GitHub Actions
-# Owner: <your-github-username>
+# Owner: MGPerdue
 # Repository: recua
 # Workflow: publish.yml
 # Environment: pypi
@@ -20,10 +20,10 @@ jobs:
     name: Build distribution
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
         with:
           version: "latest"
 
