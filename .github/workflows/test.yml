@@ -35,6 +35,7 @@ jobs:
           uv run pytest
           -m "not integration"
           --cov=recua
+          --cov-branch
           --cov-report=term-missing
           --cov-report=xml
           --timeout=60
@@ -48,8 +49,9 @@ jobs:
           -v
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         if: matrix.python-version == '3.11'
         with:
           files: ./coverage.xml
           fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
