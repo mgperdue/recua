@@ -9,22 +9,56 @@ Typical usage (context manager, recommended):
         for url, dest in my_urls:
             engine.submit(TransferJob(source=url, dest=dest))
 
+    # __exit__ calls close() then join() — blocks until all jobs finish.
+
 Explicit lifecycle (for programmatic control):
 
     engine = TransferEngine(opts)
     engine.start()
-    engine.submit(job)
-    engine.close()
-    engine.join()
 
-Thread safety: submit() is safe to call from any thread.
+    engine.submit(job)          # from any thread, any time
+    engine.submit_many(jobs)    # convenience bulk submission
+
+    engine.close()              # signal: no more submissions
+    engine.join()               # block until all jobs complete
+
+    stats = engine.stats()      # live metrics snapshot at any point
+
+Cancellation:
+
+    engine.cancel()             # stop immediately; partial downloads resumable
+    engine.join()               # wait for workers to finish current chunks
+
+Thread safety
+-------------
+submit() is safe to call from any thread at any time after start().
+stats() is safe to call from any thread at any time.
+start() / close() / join() / cancel() are NOT thread-safe — call from
+the owning thread only.
+
+Lifecycle state machine
+-----------------------
+CREATED → start() → RUNNING → close() → CLOSING → join() → DONE
+                                       → cancel()         → DONE
+
+close() vs cancel()
+-------------------
+close():  sets _closed=True. No more submissions accepted.
+          join() will drain the queue before stopping workers.
+          Use for graceful shutdown — all submitted jobs complete.
+
+cancel(): sets _closed=True AND immediately signals shutdown.
+          Workers finish their current chunk, then exit.
+          Remaining queued jobs are NOT processed.
+          Partial downloads remain resumable via StateStore.
+          join() waits for workers to exit.
 """
 
 from __future__ import annotations
 
 import logging
 import threading
-from typing import Iterable
+from collections.abc import Iterable
 
 from recua.adapters.http import HTTPAdapter
 from recua.exceptions import EngineNotStartedError, EngineShutdownError
@@ -43,7 +77,12 @@ class TransferEngine:
     """
     Concurrent job engine for moving many large files reliably.
 
-    See module docstring for usage examples.
+    See module docstring for usage patterns.
+
+    Parameters
+    ----------
+    options:
+        Engine configuration. Defaults to TransferOptions() if not provided.
     """
 
     def __init__(self, options: TransferOptions | None = None) -> None:
@@ -67,66 +106,167 @@ class TransferEngine:
     # ------------------------------------------------------------------
 
     def start(self) -> None:
-        """Spin up worker threads. Must be called before submit()."""
-        # TODO:
-        #   - guard against double-start
-        #   - create and start max_workers Worker instances
-        #   - set self._started = True
-        raise NotImplementedError
+        """
+        Spin up worker threads and begin processing submitted jobs.
+
+        Must be called exactly once before any submit() call.
+
+        Raises
+        ------
+        RuntimeError
+            If called more than once on the same engine instance.
+        """
+        if self._started:
+            raise RuntimeError(
+                "TransferEngine.start() called more than once. "
+                "Create a new TransferEngine instance for a new run."
+            )
+
+        logger.info(
+            "Starting TransferEngine with %d workers", self._options.max_workers
+        )
+
+        for i in range(self._options.max_workers):
+            worker = Worker(
+                worker_id=i,
+                scheduler=self._scheduler,
+                adapters=self._adapters,
+                state=self._state,
+                metrics=self._metrics,
+                rate_limiter=self._rate_limiter,
+                options=self._options,
+                shutdown_event=self._shutdown_event,
+            )
+            worker.start()
+            self._workers.append(worker)
+
+        self._started = True
+        logger.debug("TransferEngine started — %d workers running", len(self._workers))
 
     def close(self) -> None:
         """
         Signal that no more jobs will be submitted.
 
-        Workers will finish all queued jobs, then exit.
-        Non-blocking — call join() to wait for completion.
+        Non-blocking. Workers continue processing all queued jobs until
+        the queue is drained, then exit. Call join() to wait for completion.
+
+        Safe to call multiple times — subsequent calls are no-ops.
         """
-        # TODO: set self._closed = True, set shutdown_event (after queue drains)
-        raise NotImplementedError
+        if self._closed:
+            return
+        self._closed = True
+        logger.debug("TransferEngine closed — no more submissions accepted")
 
     def join(self) -> None:
-        """Block until all submitted jobs are finished and workers have exited."""
-        # TODO: scheduler.join() then thread.join() for each worker
-        raise NotImplementedError
+        """
+        Block until all submitted jobs are finished and all workers have exited.
+
+        For a graceful shutdown (after close()):
+          1. Waits for the scheduler queue to drain completely.
+          2. Sets the shutdown event, signalling workers to exit.
+          3. Joins each worker thread.
+
+        For a cancelled shutdown (after cancel()):
+          The shutdown event is already set. Skips the queue drain and
+          waits directly for workers to finish their current chunk.
+
+        Safe to call before close() — will drain and shut down.
+        """
+        if not self._started:
+            return
+
+        if not self._shutdown_event.is_set():
+            # Graceful path: drain the queue before stopping workers.
+            logger.debug("TransferEngine joining — draining queue")
+            self._scheduler.join()
+            self._shutdown_event.set()
+
+        logger.debug("TransferEngine waiting for workers to exit")
+        for worker in self._workers:
+            worker.join()
+
+        logger.info("TransferEngine shut down cleanly")
 
     def cancel(self) -> None:
         """
         Immediately stop scheduling new jobs.
 
-        Workers finish their current chunk, then exit.
-        Partial downloads remain resumable via StateStore.
+        Workers finish their current in-progress chunk, then exit.
+        Queued jobs that have not yet started are abandoned — partial
+        downloads remain resumable via StateStore on the next run.
+
+        Call join() after cancel() to wait for workers to finish their
+        current chunks.
+
+        Safe to call multiple times — subsequent calls are no-ops.
         """
-        # TODO: set shutdown_event immediately (don't drain queue)
-        raise NotImplementedError
+        if self._shutdown_event.is_set():
+            return
+        self._closed = True
+        self._shutdown_event.set()
+        logger.info("TransferEngine cancelled — workers will exit after current chunk")
 
     # ------------------------------------------------------------------
     # Submission
     # ------------------------------------------------------------------
 
-    def submit(self, job: TransferJob, block: bool = True, timeout: float | None = None) -> None:
+    def submit(
+        self,
+        job: TransferJob,
+        block: bool = True,
+        timeout: float | None = None,
+    ) -> None:
         """
         Add a job to the transfer queue.
 
-        Args:
-            job:     The TransferJob to enqueue.
-            block:   If True, wait when queue is full (backpressure).
-            timeout: Max seconds to wait when block=True.
+        Parameters
+        ----------
+        job:
+            The TransferJob to enqueue.
+        block:
+            If True (default), block until queue space is available.
+            Acts as natural backpressure on fast producers.
+        timeout:
+            When block=True, maximum seconds to wait for queue space.
+            None means wait indefinitely.
 
-        Raises:
-            EngineNotStartedError: if start() has not been called.
-            EngineShutdownError:   if close() or cancel() has been called.
-            QueueFullError:        if block=False and queue is at capacity.
+        Raises
+        ------
+        EngineNotStartedError:
+            If start() has not been called.
+        EngineShutdownError:
+            If close() or cancel() has been called.
+        QueueFullError:
+            If block=False and the queue is at capacity, or if block=True
+            and the timeout expires before space becomes available.
         """
         if not self._started:
-            raise EngineNotStartedError("Call engine.start() before submitting jobs.")
+            raise EngineNotStartedError(
+                "Call engine.start() before submitting jobs."
+            )
         if self._closed:
-            raise EngineShutdownError("Cannot submit after close() or cancel().")
-        # TODO: self._scheduler.put(job, block=block, timeout=timeout)
-        #       self._metrics.job_queued(job.expected_size)
-        raise NotImplementedError
+            raise EngineShutdownError(
+                "Cannot submit jobs after close() or cancel() has been called."
+            )
+
+        self._scheduler.put(job, block=block, timeout=timeout)
+        self._metrics.job_queued(job.expected_size)
 
     def submit_many(self, jobs: Iterable[TransferJob]) -> None:
-        """Convenience wrapper — submits each job with default blocking behaviour."""
+        """
+        Submit an iterable of jobs with default blocking behaviour.
+
+        Equivalent to calling submit(job) for each job in the iterable.
+        Useful with generator producers — the queue applies backpressure
+        automatically, so the producer is only as fast as workers drain.
+
+        Example
+        -------
+        engine.submit_many(
+            TransferJob(source=url, dest=out_dir / Path(url).name)
+            for url in discover_urls()
+        )
+        """
         for job in jobs:
             self.submit(job)
 
@@ -135,7 +275,12 @@ class TransferEngine:
     # ------------------------------------------------------------------
 
     def stats(self) -> EngineStats:
-        """Return a consistent snapshot of current engine metrics."""
+        """
+        Return a consistent snapshot of current engine metrics.
+
+        Safe to call from any thread at any time.
+        The snapshot is atomic — all fields reflect the same instant.
+        """
         return self._metrics.snapshot()
 
     # ------------------------------------------------------------------
@@ -146,6 +291,6 @@ class TransferEngine:
         self.start()
         return self
 
-    def __exit__(self, *_) -> None:
+    def __exit__(self, *_: object) -> None:
         self.close()
         self.join()
