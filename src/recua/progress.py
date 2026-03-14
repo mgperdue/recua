@@ -37,6 +37,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from rich.progress import Progress as RichProgress
+    from rich.progress import TaskID
 
     from recua.job import TransferJob
     from recua.metrics import MetricsCollector
@@ -127,9 +128,9 @@ class _RichDisplay(ProgressDisplay):
     def __init__(self, metrics: MetricsCollector) -> None:
         self._metrics = metrics
         self._lock = threading.Lock()
-        self._task_ids: dict[str, int] = {}  # job.display_name → rich task id
+        self._task_ids: dict[str, TaskID] = {}  # job.display_name → rich task id
         self._progress: RichProgress | None = None
-        self._overall_task: int | None = None
+        self._overall_task: TaskID | None = None
         self._refresh_thread: threading.Thread | None = None
         self._stop_event = threading.Event()
 

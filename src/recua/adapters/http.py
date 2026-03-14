@@ -193,9 +193,9 @@ class HTTPAdapter:
             for chunk in response.iter_content(chunk_size=chunk_size):
                 if chunk:  # filter keep-alive empty chunks
                     yield chunk
-        except requests.ChunkedEncodingError as exc:
+        except requests.exceptions.ChunkedEncodingError as exc:
             raise RetriableError(f"Stream interrupted for {job.source!r}: {exc}") from exc
-        except requests.ConnectionError as exc:
+        except requests.exceptions.ConnectionError as exc:
             raise RetriableError(
                 f"Connection lost during download of {job.source!r}: {exc}"
             ) from exc
